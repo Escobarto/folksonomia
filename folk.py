@@ -8,6 +8,10 @@ from datetime import datetime
 import hashlib
 import base64
 from io import BytesIO
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
 
 # Configuração inicial
 st.set_page_config(page_title="Projeto Folksonomia", layout="wide")
@@ -202,62 +206,39 @@ def show_intro():
 
 def show_obras():
     st.title("Explorar Obras")
-    
-    # Verificar se o usuário completou o questionário
+
     if st.session_state['step'] == 'intro':
         st.warning("Por favor, complete o questionário inicial antes de explorar as obras.")
         if st.button("Ir para o questionário"):
             st.rerun()
         return
-    
+
     obras = load_obras()
-    
-    # Criar linhas para exibir obras em formato de grade
     cols = st.columns(3)
-    
-    # Distribuir as obras nas colunas
+
     for i, obra in enumerate(obras):
         with cols[i % 3]:
-            #st.subheader(obra['titulo'])
-            #st.write(f"{obra['artista']}, {obra['ano']}")
             st.image(obra['imagem'], use_container_width=True)
             if st.button(f"Selecionar", key=f"btn_{obra['id']}"):
                 st.session_state['selected_obra'] = obra
                 st.rerun()
-    
-    # Era colocado após Selecionar'{obra['titulo']}'"#
 
-    # Exibir obra selecionada se houver
-    if 'selected_obra' in st.session_state:
-        st.write("---")
-        obra = st.session_state['selected_obra']
-        st.header(f"Você selecionou a seguinte obra:")
-        col1, col2 = st.columns([1, 1])
-        # Colocado após selecionou: {obra['titulo']}
-        with col1:
-            st.image(obra['imagem'], use_container_width=True)
-        
-        #with col2:
-            #st.subheader(f"{obra['artista']}, {obra['ano']}")
-            
-            # Formulário para adicionar tags
-            with st.form(f"tag_form_{obra['id']}"):
-                tag = st.text_input("Adicione uma tag para esta obra:")
-                submitted = st.form_submit_button("Enviar Tag")
-                
-                if submitted and tag:
-                    save_tag(st.session_state['user_id'], obra['id'], tag)
-                    st.success(f"Tag '{tag}' adicionada com sucesso!")
-                    st.rerun()
-            
-            # Exibir tags existentes
-            #st.subheader("Tags populares para esta obra:")
-            #tags = get_tags_for_obra(obra['id'])
-            #if not tags.empty:
-                #for _, row in tags.iterrows():
-                    #st.write(f"- {row['tag']} ({row['count']} vezes)")
-            #else:
-                #st.write("Ainda não há tags para esta obra. Seja o primeiro a adicionar!")
+            if 'selected_obra' in st.session_state and st.session_state['selected_obra']['id'] == obra['id']:
+                with st.form(f"tag_form_{obra['id']}"):
+                    tag = st.text_input("Adicione uma tag para esta obra:")
+                    submitted = st.form_submit_button("Enviar Tag")
+                    if submitted and tag:
+                        save_tag(st.session_state['user_id'], obra['id'], tag)
+                        st.success(f"Tag '{tag}' adicionada com sucesso!")
+                        st.rerun()
+
+                #tags = get_tags_for_obra(obra['id'])
+                #if not tags.empty:
+                    #st.write("**Tags populares:**")
+                    #for _, row in tags.iterrows():
+                        #st.write(f"- {row['tag']} ({row['count']} vezes)")
+               # else:
+                    #st.write("Ainda não há tags para esta obra. Seja o primeiro a adicionar!")
 
 def show_admin():
     st.title("Área Administrativa")
@@ -401,6 +382,48 @@ def show_admin():
                     file_name='users_data.csv',
                     mime='text/csv',
                 )
+        def df_to_pdf_bytes(df, title="Relatório"):
+            buffer = BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=A4)
+            elements = []
+
+            styles = getSampleStyleSheet()
+            elements.append(Paragraph(title, styles["Heading1"]))
+            elements.append(Spacer(1, 12))
+
+            data = [df.columns.tolist()] + df.astype(str).values.tolist()
+            table = Table(data, repeatRows=1)
+            table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 10),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+            ]))
+
+            elements.append(table)
+            doc.build(elements)
+            pdf = buffer.getvalue()
+            buffer.close()
+            return pdf
+
+        # Botões de download em PDF
+        st.download_button(
+            label="Download dados de tags (PDF)",
+            data=df_to_pdf_bytes(tags_df, title="Relatório de Tags"),
+            file_name="tags_data.pdf",
+            mime="application/pdf"
+        )
+
+        st.download_button(
+            label="Download dados de usuários (PDF)",
+            data=df_to_pdf_bytes(users_df, title="Relatório de Usuários"),
+            file_name="users_data.pdf",
+            mime="application/pdf"
+        )
+
+
         
         # Tab 2: Gerenciar Obras
         with admin_tabs[1]:
