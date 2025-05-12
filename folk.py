@@ -15,14 +15,17 @@ from reportlab.lib import colors
 from supabase import create_client
 import uuid
 
+
 # Configuração do Supabase
 SUPABASE_URL = "https://irxyfzfvvdszfkkjothq.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlyeHlmemZ2dmRzemZra2pvdGhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY5MjE2NzMsImV4cCI6MjA2MjQ5NzY3M30.vcEG3PUVG_X_PdML_JHqygAjcumfvrcAAteEYF5msHo"
 # Inicializar cliente Supabase
 supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+
 # Configuração inicial do Streamlit
 st.set_page_config(page_title="Projeto Folksonomia", layout="wide")
+
 
 # Funções para interagir com o Supabase
 def check_and_init_admin():
@@ -39,29 +42,36 @@ def check_and_init_admin():
     except Exception as e:
         st.error(f"Erro ao verificar admin: {e}")
 
+
 # Função para fazer upload de imagem para o Supabase Storage
 def upload_image_to_storage(file):
     try:
-        # Verificar se o arquivo tem uma extensão válida
-        if not file.name or '.' not in file.name:
-            st.error("O arquivo deve ter uma extensão válida (jpg, jpeg, png)")
+        # Verificar se o arquivo tem um nome
+        if not hasattr(file, 'name') or not file.name:
+            st.error("O arquivo enviado não possui um nome válido.")
+            return None
+            
+        # Extrair extensão (remover o ponto inicial se estiver presente)
+        file_name = file.name.lower()
+        if '.' in file_name:
+            file_ext = file_name.split('.')[-1]
+        else:
+            st.error("O arquivo não possui uma extensão.")
+            return None
+            
+        # Verificar manualmente se a extensão é permitida
+        if file_ext not in ['jpg', 'jpeg', 'png']:
+            st.error(f"Formato de arquivo não permitido: {file_ext}. Use jpg, jpeg ou png.")
             return None
             
         # Gerar um nome único para o arquivo
-        file_ext = file.name.split('.')[-1].lower()
-        
-        # Verificar se a extensão é permitida
-        if file_ext not in ['jpg', 'jpeg', 'png']:
-            st.error(f"Extensão de arquivo não permitida: {file_ext}. Use jpg, jpeg ou png.")
-            return None
-            
         unique_filename = f"{uuid.uuid4()}.{file_ext}"
         
         # Fazer upload do arquivo
         supabase_client.storage.from_('obras-imagens').upload(
             unique_filename,
             file.getvalue(),
-            file_options={"contentType": f"image/{file_ext}"}
+            file_options={"contentType": f"image/{file_ext.replace('jpg', 'jpeg')}"}  # jpg deve ser jpeg para MIME type
         )
         
         # Obter a URL pública da imagem
@@ -72,11 +82,13 @@ def upload_image_to_storage(file):
         st.error(f"Erro detalhado: {str(e)}")
         return None
 
+
 # Chamar a verificação do admin ao iniciar
 try:
     check_and_init_admin()
 except Exception as e:
     st.error(f"Erro ao verificar admin: {e}")
+
 
 # Carregar dados das obras
 @st.cache_data(ttl=5, show_spinner=False) # Expira o cache após 5 segundos
@@ -98,10 +110,12 @@ def load_obras():
         st.error(f"Erro ao carregar obras: {e}")
         return []
 
+
 # Funções utilitárias
 def generate_user_id():
     """Gera um ID único para o usuário"""
     return base64.b64encode(os.urandom(12)).decode('ascii')
+
 
 def save_user_answers(user_id, answers):
     """Salva as respostas do questionário no Supabase"""
@@ -119,6 +133,7 @@ def save_user_answers(user_id, answers):
         st.error(f"Erro ao salvar respostas: {e}")
         return False
 
+
 def save_tag(user_id, obra_id, tag):
     """Salva uma tag associada a uma obra no Supabase"""
     try:
@@ -133,6 +148,7 @@ def save_tag(user_id, obra_id, tag):
     except Exception as e:
         st.error(f"Erro ao salvar tag: {e}")
         return False
+
 
 def get_tags_for_obra(obra_id):
     """Obtém todas as tags para uma obra específica do Supabase"""
@@ -149,6 +165,7 @@ def get_tags_for_obra(obra_id):
         st.error(f"Erro ao obter tags: {e}")
         return pd.DataFrame(columns=["tag", "count"])
 
+
 def check_admin_credentials(username, password):
     """Verifica as credenciais do administrador no Supabase"""
     try:
@@ -161,6 +178,7 @@ def check_admin_credentials(username, password):
     except Exception as e:
         st.error(f"Erro ao verificar credenciais: {e}")
         return False
+
 
 # Funções para gráficos
 def plot_tag_frequency(tags_df):
@@ -178,6 +196,7 @@ def plot_tag_frequency(tags_df):
     plt.tight_layout()
     return fig
 
+
 def generate_wordcloud(tags_df):
     """Gera uma nuvem de palavras com as tags"""
     if tags_df.empty:
@@ -189,6 +208,7 @@ def generate_wordcloud(tags_df):
     ax.axis("off")
     plt.tight_layout()
     return fig
+
 
 def plot_tags_over_time(tags_df):
     """Gera um gráfico de linha mostrando a evolução do número de tags ao longo do tempo"""
@@ -205,6 +225,7 @@ def plot_tags_over_time(tags_df):
     plt.tight_layout()
     return fig
 
+
 # Interface principal do Streamlit
 def main():
     # Inicializar estado da sessão
@@ -214,17 +235,29 @@ def main():
         st.session_state['step'] = 'intro'
     if 'answers' not in st.session_state:
         st.session_state['answers'] = {}
+    # Adicionar variável para controlar a navegação
+    if 'current_page' not in st.session_state:
+        st.session_state['current_page'] = "Início"
+
 
     # Barra lateral
     st.sidebar.title("Navegação")
     page = st.sidebar.radio("Ir para:", ["Início", "Explorar Obras", "Área Administrativa"])
+    
+    # Atualizar a página atual quando o usuário mudar no radio button
+    if page != st.session_state.get('current_page'):
+        st.session_state['current_page'] = page
+        st.rerun()
 
-    if page == "Início":
+
+    # Mostrar a página apropriada
+    if st.session_state['current_page'] == "Início":
         show_intro()
-    elif page == "Explorar Obras":
+    elif st.session_state['current_page'] == "Explorar Obras":
         show_obras()
-    elif page == "Área Administrativa":
+    elif st.session_state['current_page'] == "Área Administrativa":
         show_admin()
+
 
 def show_intro():
     st.title("Projeto de Folksonomia em Museus")
@@ -232,6 +265,7 @@ def show_intro():
     Bem-vindo ao nosso projeto de folksonomia! Estamos estudando como o público interage com acervos de museus,
     e sua participação é muito importante. Antes de começarmos, gostaríamos de fazer algumas perguntas rápidas.
     """)
+
 
     if st.session_state['step'] == 'intro':
         with st.form("intro_form"):
@@ -257,13 +291,17 @@ def show_intro():
     else:
         st.success("Obrigado por responder ao nosso questionário inicial! Agora você pode explorar as obras e adicionar suas tags.")
 
+
 def show_obras():
     st.title("Explorar Obras")
     if st.session_state['step'] == 'intro':
         st.warning("Por favor, complete o questionário inicial antes de explorar as obras.")
-        if st.button("Ir para o questionário"):
+        # Modificação aqui para fazer o botão funcionar corretamente
+        if st.button("Responder questionário"):
+            st.session_state['current_page'] = "Início"
             st.rerun()
         return
+
 
     obras = load_obras()
     cols = st.columns(3)
@@ -284,6 +322,7 @@ def show_obras():
                         st.success(f"Tag '{tag}' adicionada com sucesso!")
                         st.rerun()
 
+
                 # Exibir tags populares para esta obra
                 tags = get_tags_for_obra(obra['id'])
                 if not tags.empty:
@@ -292,6 +331,7 @@ def show_obras():
                         st.write(f"- {row['tag']} ({row['count']} vezes)")
                 else:
                     st.write("Ainda não há tags para esta obra. Seja o primeiro a adicionar!")
+
 
 def show_admin():
     st.title("Área Administrativa")
@@ -314,6 +354,7 @@ def show_admin():
         # Criar abas principais da área administrativa
         admin_tabs = st.tabs(["Análise de Dados", "Gerenciar Obras", "Gerenciar Administradores"])
 
+
         # Tab 1: Análise de Dados
         with admin_tabs[0]:
             st.write("### Análise de Dados")
@@ -330,6 +371,7 @@ def show_admin():
                 else:
                     users_df = pd.DataFrame(columns=["user_id", "timestamp", "q1", "q2", "q3"])
 
+
                 # Métricas principais
                 col1, col2, col3 = st.columns(3)
                 with col1:
@@ -338,6 +380,7 @@ def show_admin():
                     st.metric("Total de Tags", len(tags_df) if not tags_df.empty else 0)
                 with col3:
                     st.metric("Tags Únicas", len(tags_df["tag"].unique()) if not tags_df.empty else 0)
+
 
                 # Guias para diferentes visualizações
                 tab1, tab2, tab3, tab4 = st.tabs(["Frequência de Tags", "Nuvem de Palavras", "Tags ao Longo do Tempo", "Dados Brutos"])
@@ -405,6 +448,7 @@ def show_admin():
                                     st.success("Todos os dados de tags foram excluídos!")
                                     st.rerun()
 
+
                     st.subheader("Usuários e Respostas")
                     st.dataframe(users_df)
                     # Opção para excluir dados de usuários
@@ -416,6 +460,7 @@ def show_admin():
                                 supabase_client.table('users').delete().neq('user_id', 'dummy_value').execute()
                                 st.success("Todos os dados de usuários foram excluídos!")
                                 st.rerun()
+
 
                     # Opção para download dos dados
                     if not tags_df.empty:
@@ -434,6 +479,7 @@ def show_admin():
                         )
             except Exception as e:
                 st.error(f"Erro ao carregar dados para análise: {e}")
+
 
         def df_to_pdf_bytes(df, title="Relatório"):
             buffer = BytesIO()
@@ -461,6 +507,7 @@ def show_admin():
             buffer.close()
             return pdf
 
+
         # Botões de download em PDF
         try:
             tags_response = supabase_client.table('tags').select('*').execute()
@@ -484,6 +531,7 @@ def show_admin():
         except Exception as e:
             st.error(f"Erro ao preparar downloads: {e}")
 
+
         # Tab 2: Gerenciar Obras
         with admin_tabs[1]:
             st.write("### Gerenciar Obras")
@@ -496,24 +544,37 @@ def show_admin():
             else:
                 st.write("Não há obras cadastradas.")
 
+
             # Adicionar nova obra
             st.subheader("Adicionar Nova Obra")
             with st.form("adicionar_obra"):
                 novo_titulo = st.text_input("Título da Obra:")
                 novo_artista = st.text_input("Artista:")
                 novo_ano = st.text_input("Ano:")
-                
+
+
                 # Opções para a imagem (URL ou upload)
                 imagem_opcao = st.radio("Fonte da Imagem:", ["URL", "Upload"])
-                
+
+
                 imagem_path = ""
                 if imagem_opcao == "URL":
                     imagem_path = st.text_input("URL da Imagem:")
                 else:
-                    uploaded_file = st.file_uploader("Carregar Imagem", type=["jpg", "jpeg", "png"])
-                
+                    st.write("**Formatos permitidos: JPG, JPEG, PNG**")
+                    # Removemos o parâmetro type para evitar o erro de extensão
+                    uploaded_file = st.file_uploader("Carregar Imagem", accept_multiple_files=False)
+                    if uploaded_file is not None:
+                        try:
+                            # Mostrar preview da imagem
+                            st.image(uploaded_file, caption="Preview da imagem", width=300)
+                        except Exception:
+                            st.error("Não foi possível exibir a pré-visualização da imagem.")
+
+
                 submit_obra = st.form_submit_button("Adicionar Obra")
-                
+
+
                 if submit_obra:
                     if not novo_titulo or not novo_artista:
                         st.error("Preencha o título e o artista!")
@@ -524,19 +585,27 @@ def show_admin():
                     else:
                         # Se foi escolhido upload, processar o arquivo
                         if imagem_opcao == "Upload" and uploaded_file is not None:
+                            # Verificar manualmente a extensão
+                            file_name = uploaded_file.name.lower()
+                            if not (file_name.endswith('.jpg') or file_name.endswith('.jpeg') or file_name.endswith('.png')):
+                                st.error("Por favor, envie apenas imagens nos formatos JPG, JPEG ou PNG.")
+                                st.stop()
+                                
                             # Fazer upload da imagem para o Storage do Supabase
                             with st.spinner("Fazendo upload da imagem..."):
                                 imagem_path = upload_image_to_storage(uploaded_file)
                                 if not imagem_path:
                                     st.error("Falha ao fazer upload da imagem.")
                                     st.stop()
-                        
+
+
                         # Gerar novo ID (maior ID existente + 1)
                         novo_id = 1
                         if obras:
                             ids = [obra["id"] for obra in obras]
                             novo_id = max(ids) + 1
-                        
+
+
                         # Adicionar nova obra
                         try:
                             nova_obra = {
@@ -553,6 +622,7 @@ def show_admin():
                             st.rerun()
                         except Exception as e:
                             st.error(f"Erro ao adicionar obra: {e}")
+
 
             # Excluir obras
             st.subheader("Excluir Obra")
@@ -581,6 +651,7 @@ def show_admin():
                             st.error(f"Erro ao excluir obra: {e}")
                 else:
                     st.write("Não há obras para excluir.")
+
 
         # Tab 3: Gerenciar Administradores
         with admin_tabs[2]:
@@ -611,6 +682,7 @@ def show_admin():
                             except Exception as e:
                                 st.error(f"Erro ao adicionar administrador: {e}")
 
+
             # Exibir lista de administradores existentes
             try:
                 admin_response = supabase_client.table('admin').select('*').execute()
@@ -618,6 +690,7 @@ def show_admin():
                     admin_df = pd.DataFrame(admin_response.data)
                     st.write("### Administradores existentes:")
                     st.dataframe(admin_df[["username"]]) # Mostrar apenas nomes de usuário, não senhas
+
 
                     # Excluir administrador
                     with st.expander("Excluir administrador"):
@@ -641,11 +714,13 @@ def show_admin():
             except Exception as e:
                 st.error(f"Erro ao carregar administradores: {e}")
 
+
         # Botão para logout
         st.write("---")
         if st.button("Logout"):
             st.session_state['admin_logged_in'] = False
             st.rerun()
+
 
 # Executar o aplicativo
 if __name__ == "__main__":
