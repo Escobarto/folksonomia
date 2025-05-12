@@ -42,14 +42,26 @@ def check_and_init_admin():
 # Função para fazer upload de imagem para o Supabase Storage
 def upload_image_to_storage(file):
     try:
+        # Verificar se o arquivo tem uma extensão válida
+        if not file.name or '.' not in file.name:
+            st.error("O arquivo deve ter uma extensão válida (jpg, jpeg, png)")
+            return None
+            
         # Gerar um nome único para o arquivo
-        file_ext = file.name.split('.')[-1]
+        file_ext = file.name.split('.')[-1].lower()
+        
+        # Verificar se a extensão é permitida
+        if file_ext not in ['jpg', 'jpeg', 'png']:
+            st.error(f"Extensão de arquivo não permitida: {file_ext}. Use jpg, jpeg ou png.")
+            return None
+            
         unique_filename = f"{uuid.uuid4()}.{file_ext}"
         
-        # Fazer upload do arquivo para o bucket já criado manualmente
+        # Fazer upload do arquivo
         supabase_client.storage.from_('obras-imagens').upload(
             unique_filename,
-            file.getvalue()
+            file.getvalue(),
+            file_options={"contentType": f"image/{file_ext}"}
         )
         
         # Obter a URL pública da imagem
@@ -59,8 +71,6 @@ def upload_image_to_storage(file):
     except Exception as e:
         st.error(f"Erro detalhado: {str(e)}")
         return None
-
-
 
 # Chamar a verificação do admin ao iniciar
 try:
